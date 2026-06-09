@@ -562,6 +562,9 @@ html, body {
 .stage.cols-5 .scorer-line,
 .stage.cols-6 .scorer-line { font-size: 17px; }
 
+/* Linha de cartão vermelho */
+.scorer-line.red-card-line { color: #ff4444; }
+
 /* ════ PANTALLA SIN DATOS / CUENTA REGRESIVA ════ */
 .splash {
   display: flex;

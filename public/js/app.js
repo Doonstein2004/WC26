@@ -53,9 +53,58 @@ function flagImg(team) {
 // Fecha de inicio del torneo (primer partido)
 const WC_START = new Date('2026-06-11T17:00:00-05:00'); // Ciudad de México, hora local
 
-let matches = [];
-let mode    = 'live';
-let modTimer = null; // mantido para compatibilidade com clearTimeout
+let matches  = [];
+let rotPage  = 0;       // página atual da rotação
+let rotTimer = null;    // setInterval handle
+
+const PAGE_MS = 20_000; // 20 s por página ≈ 1 min para 18 partidas (3 páginas)
+
+// Ordena: AO VIVO > ENCERRADO > AGENDADO; dentro de cada status por horário
+function sortForDisplay(list) {
+  const ord = { LIVE: 0, FINISHED: 1, SCHEDULED: 2 };
+  return [...list].sort((a, b) => {
+    const da = ord[a.status] ?? 9, db = ord[b.status] ?? 9;
+    return da !== db ? da - db : a.time.localeCompare(b.time);
+  });
+}
+
+// Liga/desliga o timer de rotação conforme necessidade
+function manageRotation(isLive, total) {
+  if (!isLive && total > 6) {
+    if (!rotTimer) rotTimer = setInterval(() => { rotPage++; render(); }, PAGE_MS);
+  } else {
+    clearInterval(rotTimer); rotTimer = null;
+    if (isLive) rotPage = 0;
+  }
+}
+
+// Abreviações para o ticker
+const TEAM_ABBREV = {
+  'Brasil':'BRA','Argentina':'ARG','França':'FRA','Alemanha':'ALE','Espanha':'ESP',
+  'Portugal':'POR','Inglaterra':'ING','Itália':'ITA','Países Baixos':'HOL','Bélgica':'BEL',
+  'EUA':'EUA','México':'MEX','Canadá':'CAN','Uruguai':'URU','Colômbia':'COL',
+  'Equador':'EQU','Chile':'CHI','Paraguai':'PAR','Peru':'PER','Bolívia':'BOL',
+  'Venezuela':'VEN','Japão':'JPN','China':'CHN','Austrália':'AUS','Nova Zelândia':'NZL',
+  'Coreia do Sul':'COR','Marrocos':'MAR','Senegal':'SEN','Gana':'GAN','Nigéria':'NIG',
+  'Egito':'EGI','Camarões':'CMR','Tunísia':'TUN','Argélia':'ALG','Suíça':'SUI',
+  'Áustria':'AUT','Dinamarca':'DIN','Suécia':'SUE','Noruega':'NOR','Polônia':'POL',
+  'Ucrânia':'UCR','Croácia':'CRO','Sérvia':'SER','Hungria':'HUN','Rússia':'RUS',
+  'República Checa':'RCH','Eslováquia':'ESL','Islândia':'ISL','Irão':'IRA','Iraque':'IRQ',
+  'Arábia Saudita':'SAU','Catar':'QAT','Turquia':'TUR','RD Congo':'RDC','Bósnia-Herz.':'BOS',
+  'Curaçao':'CUR','Costa do Marfim':'CDM','Cabo Verde':'CPV','África do Sul':'AFS',
+  'Trinidad e Tobago':'TRI','Haiti':'HAI','Jamaica':'JAM','Panamá':'PAN','Costa Rica':'CRC',
+  'Indonésia':'IDN','Tailândia':'THA','Filipinas':'PHI','Mianmar':'MYA','Camboja':'CMB',
+  'Hong Kong':'HKG','Escócia':'ESC','País de Gales':'GAL','Jordânia':'JOR','Palestina':'PAL',
+  'Uzbequistão':'UZB','Cazaquistão':'KAZ','Quirguistão':'KGZ','Azerbaijão':'AZE',
+  'Armênia':'ARM','Moldávia':'MDA','Bielorrússia':'BLR','Moçambique':'MOZ','Angola':'ANG',
+  'San Marino':'SMR','Burkina Faso':'BKF','Guiné Equatorial':'GEQ','Omã':'OMA','Kuwait':'KUW',
+  'Grécia':'GRE','Romênia':'ROM','Eslováquia':'ESL',
+};
+function abbrev(t) {
+  if (TEAM_ABBREV[t]) return TEAM_ABBREV[t];
+  const w = t.split(/[\s\-]+/);
+  return (w.length >= 2 ? w.map(x => x[0]).join('') : t.slice(0, 3)).toUpperCase().slice(0, 4);
+}
 
 // ── Relógio ───────────────────────────────────────────────────────────────────
 function tick() {
@@ -76,9 +125,7 @@ tick();
 let dataSource = '';
 
 // ?test=N → layout de teste com dados simulados
-// ?todos  → mostrar todos os jogos do dia (ao vivo + agendados + encerrados)
 const TEST_PARAM = new URLSearchParams(window.location.search).get('test');
-const SHOWALL    = new URLSearchParams(window.location.search).has('todos');
 
 async function load() {
   try {
@@ -89,20 +136,6 @@ async function load() {
     if (d.source)  dataSource = d.source;
   } catch { /* rede fora — manter último estado */ }
   render();
-}
-
-// ── Auto-modo ─────────────────────────────────────────────────────────────────
-// Prioridade: ao vivo → resultados do dia → countdown
-function autoMode() {
-  if (SHOWALL) return;
-
-  clearTimeout(modTimer);
-  const live     = matches.filter(m => m.status === 'LIVE');
-  const finished = matches.filter(m => m.status === 'FINISHED');
-
-  if (live.length)      { mode = 'live';    return; }
-  if (finished.length)  { mode = 'results'; return; }
-  mode = 'live'; // lista vazia → render() mostra countdown automaticamente
 }
 
 // ── Helpers Brasil ────────────────────────────────────────────────────────────
@@ -121,47 +154,46 @@ let lastStageKey = '';
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render() {
-  autoMode();
-
-  const live     = matches.filter(m => m.status === 'LIVE');
-  const finished = matches.filter(m => m.status === 'FINISHED');
-  const sched    = matches.filter(m => m.status === 'SCHEDULED');
-
+  const all        = matches.filter(m => m.status !== 'CANCELED');
+  const live       = all.filter(m => m.status === 'LIVE');
+  const isLive     = live.length > 0;
   const brasilVivo = live.some(isBrasil);
 
-  // Badge do header (leve, não causa refluxo visual)
+  manageRotation(isLive, all.length);
+
+  // Selecionar quais 6 partidas mostrar neste ciclo
+  let list;
+  if (isLive) {
+    list = brasilFirst(live).slice(0, 6);
+  } else if (all.length) {
+    const sorted     = sortForDisplay(all);
+    const totalPages = Math.ceil(sorted.length / 6);
+    const page       = rotPage % totalPages;
+    list = brasilFirst(sorted.slice(page * 6, (page + 1) * 6));
+  } else {
+    list = [];
+  }
+
+  // Badge do header
   const center = document.getElementById('headerCenter');
   let badgeHTML;
-  if (SHOWALL) {
-    const liveCount = live.length;
-    badgeHTML = liveCount
-      ? `<div class="live-badge"><span class="dot"></span>${liveCount} AO VIVO · ${matches.filter(m=>m.status!=='CANCELED').length} jogos hoje</div>`
-      : `<div class="mode-badge">📋 ${matches.filter(m=>m.status!=='CANCELED').length} JOGOS HOJE</div>`;
-  } else if (live.length) {
+  if (isLive) {
     badgeHTML = brasilVivo
       ? `<div class="live-badge brasil-live-badge"><span class="dot brasil-dot"></span>🇧🇷 BRASIL AO VIVO</div>`
       : `<div class="live-badge"><span class="dot"></span>${live.length} AO VIVO</div>`;
+  } else if (all.length > 6) {
+    const totalPages = Math.ceil(all.length / 6);
+    const page = (rotPage % totalPages) + 1;
+    badgeHTML = `<div class="mode-badge">Pág. ${page}/${totalPages} · ${all.length} jogos hoje</div>`;
+  } else if (all.length) {
+    badgeHTML = `<div class="mode-badge">${all.length} jogos hoje</div>`;
   } else {
-    const labels = { live:'Sem jogos ao vivo', results:'Resultados de hoje', upcoming:'Próximos jogos' };
-    badgeHTML = `<div class="mode-badge">${labels[mode]}</div>`;
+    badgeHTML = `<div class="mode-badge">Sem jogos</div>`;
   }
   if (center.innerHTML !== badgeHTML) center.innerHTML = badgeHTML;
 
-  let raw;
-  if (SHOWALL) {
-    // Modo "todos": ao vivo primeiro, depois por horário
-    raw = [
-      ...live,
-      ...finished.sort((a, b) => a.time.localeCompare(b.time)),
-      ...sched.sort((a, b) => a.time.localeCompare(b.time)),
-    ];
-  } else {
-    raw = mode === 'live' ? live : mode === 'results' ? finished : sched;
-  }
-  const list = brasilFirst(raw);
   const stage = document.getElementById('stage');
 
-  // Sem partidas → mostrar countdown (atualizado pelo tickCountdown separado)
   if (!list.length) {
     const key = 'countdown';
     if (lastStageKey !== key) {
@@ -172,19 +204,17 @@ function render() {
     return;
   }
 
-  // Gerar chave baseada no estado atual dos jogos
-  // Só re-escreve o DOM se algo mudou (placar, status, minuto)
-  const n        = Math.min(list.length, 6);
+  const n        = list.length;
   const priority = isBrasil(list[0]) && n > 1;
-  const stageKey = list.slice(0, n).map(m =>
+  const stageKey = list.map(m =>
     `${m.id}:${m.status}:${m.homeScore}:${m.awayScore}:${m.minute}`
   ).join('|') + `|cols-${n}|${priority}`;
 
-  if (stageKey === lastStageKey) return; // nada mudou — não tocar no DOM
+  if (stageKey === lastStageKey) return;
   lastStageKey = stageKey;
 
   stage.className = `stage cols-${n}${priority ? ' brasil-priority' : ''}`;
-  stage.innerHTML = list.slice(0, n).map(cardHTML).join('');
+  stage.innerHTML = list.map(cardHTML).join('');
   renderTicker();
 }
 
@@ -281,23 +311,34 @@ function cardHTML(m) {
   const awayName = `<span class="team-name${m.awayTeam === 'Brasil' ? ' brasil-team' : ''}">${m.awayTeam}</span>`;
 
   let scorersHTML = '';
-  const sc = m.goalScorers || [];
-  if (!isSched && sc.length) {
+  const sc  = m.goalScorers || [];
+  const rc  = m.redCards    || [];
+  if (!isSched && (sc.length || rc.length)) {
     const homeSc = sc.filter(s => s.team === m.homeTeam);
     const awaySc = sc.filter(s => s.team === m.awayTeam);
+    const homeRc = rc.filter(s => s.team === m.homeTeam);
+    const awayRc = rc.filter(s => s.team === m.awayTeam);
 
-    const lines = arr => arr.map(s => {
-      const min = s.minute ? `<span class="min">${s.minute}'</span>` : '';
-      const pen = s.penalty ? `<span class="scorer-tag pen">P</span>` : '';
-      const og  = s.ownGoal ? `<span class="scorer-tag og">PP</span>` : '';
-      return `<div class="scorer-line">⚽ ${s.name} ${min}${pen}${og}</div>`;
+    const goalLines = arr => arr.map(s => {
+      const min = s.minute ? `<span class="min"> ${s.minute}'</span>` : '';
+      const tag = s.penalty ? `<span class="scorer-tag pen">P</span>` : s.ownGoal ? `<span class="scorer-tag og">PP</span>` : '';
+      return `<div class="scorer-line">⚽ ${s.name}${min}${tag}</div>`;
     }).join('');
+
+    const redLines = arr => arr.map(s => {
+      const min = s.minute ? `<span class="min"> ${s.minute}'</span>` : '';
+      return `<div class="scorer-line red-card-line">🟥 ${s.name}${min}</div>`;
+    }).join('');
+
+    const hasLeft  = homeSc.length || homeRc.length;
+    const hasRight = awaySc.length || awayRc.length;
 
     scorersHTML = `
       <div class="card-scorers">
-        <div class="scorers-col left">${lines(homeSc)}</div>
-        <div class="scorers-col right">${lines(awaySc)}</div>
+        <div class="scorers-col left">${goalLines(homeSc)}${redLines(homeRc)}</div>
+        <div class="scorers-col right">${goalLines(awaySc)}${redLines(awayRc)}</div>
       </div>`;
+    if (!hasLeft && !hasRight) scorersHTML = '';
   }
 
   // Badge exclusivo nos jogos do Brasil
@@ -343,17 +384,50 @@ function renderTicker() {
   }
 
   const parts = withScore.map(m => {
-    const live  = m.status === 'LIVE' ? `<span class="t-live">AO VIVO ${m.minute}'</span> ` : '';
-    const score = `<span class="t-score">${m.homeScore}-${m.awayScore}</span>`;
-    const names = (m.goalScorers || [])
+    const liveTag = m.status === 'LIVE' ? `<span class="t-live">AO VIVO ${m.minute}'</span> ` : '';
+    const score   = `<span class="t-score">${m.homeScore}-${m.awayScore}</span>`;
+
+    // Formato: "Brasil 2-1 Argentina, BRA: Vinicius 23', Rodrygo 58' | ARG: Messi 41' (P)"
+    const fmtSc = arr => arr
       .map(s => `${s.name}${s.minute ? ` ${s.minute}'` : ''}${s.penalty?' (P)':''}${s.ownGoal?' (PP)':''}`)
       .join(', ');
-    const scorerPart = names ? ` <span class="t-scorer">— ${names}</span>` : '';
-    return `${live}${m.homeTeam} ${score} ${m.awayTeam}${scorerPart}`;
+    const fmtRc = arr => arr.map(s => `🟥 ${s.name}${s.minute ? ` ${s.minute}'` : ''}`).join(', ');
+
+    const homeSc = (m.goalScorers||[]).filter(s => s.team === m.homeTeam);
+    const awaySc = (m.goalScorers||[]).filter(s => s.team === m.awayTeam);
+    const homeRc = (m.redCards||[]).filter(s => s.team === m.homeTeam);
+    const awayRc = (m.redCards||[]).filter(s => s.team === m.awayTeam);
+
+    const homeParts = [fmtSc(homeSc), fmtRc(homeRc)].filter(Boolean).join(', ');
+    const awayParts = [fmtSc(awaySc), fmtRc(awayRc)].filter(Boolean).join(', ');
+    const homeEvt   = homeParts ? `${abbrev(m.homeTeam)}: ${homeParts}` : '';
+    const awayEvt   = awayParts ? `${abbrev(m.awayTeam)}: ${awayParts}` : '';
+    const evtStr    = [homeEvt, awayEvt].filter(Boolean).join(' | ');
+    const eventHTML = evtStr ? `, <span class="t-scorer">${evtStr}</span>` : '';
+
+    return `${liveTag}${m.homeTeam} ${score} ${m.awayTeam}${eventHTML}`;
   });
 
   el.innerHTML = parts.join(` ${sep} `) + ` ${sep} 🏆 Copa do Mundo 2026`;
 }
+
+// ── Escala proporcional para telas menores que 1920×1080 ─────────────────────
+function scaleDisplay() {
+  const scaleX = window.innerWidth  / 1920;
+  const scaleY = window.innerHeight / 1080;
+  const scale  = Math.min(scaleX, scaleY, 1); // nunca escalar para cima
+  if (scale < 0.97) {
+    document.body.style.transform      = `scale(${scale.toFixed(4)})`;
+    document.body.style.transformOrigin = '0 0';
+    document.body.style.width           = `${(100 / scale).toFixed(2)}%`;
+    document.body.style.height          = `${(100 / scale).toFixed(2)}%`;
+    document.body.style.overflow        = 'hidden';
+  } else {
+    document.body.removeAttribute('style');
+  }
+}
+window.addEventListener('resize', scaleDisplay);
+scaleDisplay();
 
 // ── Arranque ──────────────────────────────────────────────────────────────────
 load();

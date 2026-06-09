@@ -207,58 +207,66 @@ async function fetchGoalScorers(espnEventId, competition = 'fifa.world') {
     // 1. scoringPlays — Copa do Mundo e outras competições premium ESPN
     const plays = data.scoringPlays || [];
     if (plays.length > 0) {
-      const scorers = [];
+      const goals = [];
       for (const play of plays) {
         const typeText = (play.type?.text || play.type?.abbreviation || '').toLowerCase();
         if (!typeText.includes('goal') && !typeText.includes('gol') && typeText !== 'g') continue;
-        scorers.push({
-          name: play.participants?.[0]?.athlete?.displayName
-               || play.athlete?.displayName
-               || 'Desconhecido',
+        goals.push({
+          name:    play.participants?.[0]?.athlete?.displayName || play.athlete?.displayName || 'Desconhecido',
           team:    normalizeName(play.team?.displayName || play.team?.name || ''),
           minute:  play.clock?.displayValue || play.period?.displayValue || '',
           ownGoal: typeText.includes('own') || typeText.includes('propia'),
           penalty: typeText.includes('pen') || typeText.includes('pk'),
         });
       }
-      return scorers;
+      return { goals, redCards: [] }; // scoringPlays não tem cartões
     }
 
     // 2. keyEvents — amistosos e outras competições (ESPN não usa scoringPlays)
-    //    Filtrar apenas eventos com scoringPlay: true
-    const keyEvents = (data.keyEvents || []).filter(e => e.scoringPlay === true);
-    if (keyEvents.length > 0) {
-      return keyEvents.map(event => {
-        const typeType = (event.type?.type || '').toLowerCase();
-        const typeText = (event.type?.text || '').toLowerCase();
-        const fullText = (event.text || '').toLowerCase();
+    const allKeyEvents = data.keyEvents || [];
 
-        // Nome: participants > shortText sem sufixo > parse do texto
-        let name = event.participants?.[0]?.athlete?.displayName || '';
-        if (!name && event.shortText) {
-          name = event.shortText
-            .replace(/\s*(own\s+goal|own-goal|penalty\s+goal|penalty|goal)\s*$/i, '')
-            .trim();
-        }
-        if (!name) {
-          const m = event.text?.match(/\.\s+([^(]+)\s+\(/);
-          if (m) name = m[1].trim();
-        }
-        if (!name) name = 'Desconhecido';
+    const extractName = (event) => {
+      let name = event.participants?.[0]?.athlete?.displayName || '';
+      if (!name && event.shortText) {
+        name = event.shortText
+          .replace(/\s*(own\s+goal|own-goal|penalty\s+goal|penalty|goal|red\s+card|ejection)\s*$/i, '')
+          .trim();
+      }
+      if (!name) {
+        const m = event.text?.match(/\.\s+([^(]+)\s+\(/);
+        if (m) name = m[1].trim();
+      }
+      return name || 'Desconhecido';
+    };
 
-        return {
-          name,
-          team:    normalizeName(event.team?.displayName || event.team?.name || ''),
-          minute:  event.clock?.displayValue || '',
-          ownGoal: typeType === 'own-goal' || typeText.includes('own goal'),
-          penalty: typeType === 'penalty'  || fullText.includes('penalty'),
-        };
-      });
-    }
+    // Gols de keyEvents
+    const goalKeyEvents = allKeyEvents.filter(e => e.scoringPlay === true);
+    const goals = goalKeyEvents.map(event => {
+      const typeType = (event.type?.type || '').toLowerCase();
+      const fullText = (event.text || '').toLowerCase();
+      return {
+        name:    extractName(event),
+        team:    normalizeName(event.team?.displayName || event.team?.name || ''),
+        minute:  event.clock?.displayValue || '',
+        ownGoal: typeType === 'own-goal'   || typeType === 'own goal',
+        penalty: typeType === 'penalty'    || fullText.includes('penalty'),
+      };
+    });
 
-    return [];
+    // Cartões vermelhos (expulsões)
+    const redKeyEvents = allKeyEvents.filter(e => {
+      const tt = (e.type?.type || '').toLowerCase();
+      return tt === 'red-card' || tt === 'red-yellow-card' || tt === 'ejection';
+    });
+    const redCards = redKeyEvents.map(event => ({
+      name:   extractName(event),
+      team:   normalizeName(event.team?.displayName || event.team?.name || ''),
+      minute: event.clock?.displayValue || '',
+    }));
+
+    return { goals, redCards };
   } catch {
-    return [];
+    return { goals: [], redCards: [] };
   }
 }
 
@@ -311,17 +319,20 @@ async function fetchESPNMatches(dateStr, competition = 'fifa.world') {
       time: formatLocalTime(event.date),
       venue: comp.venue?.fullName || '',
       goalScorers: [],
+      redCards:    [],
     });
   }
 
-  // Buscar goleadores solo de partidos con acción (no programados)
-  // Limitamos a 5 llamadas en paralelo para no saturar
+  // Buscar gols e cartões vermelhos (só partidas com ação, em lotes de 5)
   const withAction = matches.filter(m => m.status !== 'SCHEDULED');
   const BATCH = 5;
   for (let i = 0; i < withAction.length; i += BATCH) {
-    const batch = withAction.slice(i, i + BATCH);
-    const scorersList = await Promise.all(batch.map(m => fetchGoalScorers(m.espnId, competition)));
-    batch.forEach((m, idx) => { m.goalScorers = scorersList[idx]; });
+    const batch    = withAction.slice(i, i + BATCH);
+    const results  = await Promise.all(batch.map(m => fetchGoalScorers(m.espnId, competition)));
+    batch.forEach((m, idx) => {
+      m.goalScorers = results[idx].goals;
+      m.redCards    = results[idx].redCards;
+    });
   }
 
   return matches;

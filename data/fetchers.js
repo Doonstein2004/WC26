@@ -204,29 +204,59 @@ async function fetchGoalScorers(espnEventId, competition = 'fifa.world') {
     if (!res.ok) return [];
     const data = await res.json();
 
-    const scorers = [];
-
-    // ESPN guarda los goles en scoringPlays
+    // 1. scoringPlays — Copa do Mundo e outras competições premium ESPN
     const plays = data.scoringPlays || [];
-    for (const play of plays) {
-      const typeText = (play.type?.text || play.type?.abbreviation || '').toLowerCase();
-      if (!typeText.includes('goal') && !typeText.includes('gol') && typeText !== 'g') continue;
+    if (plays.length > 0) {
+      const scorers = [];
+      for (const play of plays) {
+        const typeText = (play.type?.text || play.type?.abbreviation || '').toLowerCase();
+        if (!typeText.includes('goal') && !typeText.includes('gol') && typeText !== 'g') continue;
+        scorers.push({
+          name: play.participants?.[0]?.athlete?.displayName
+               || play.athlete?.displayName
+               || 'Desconhecido',
+          team:    normalizeName(play.team?.displayName || play.team?.name || ''),
+          minute:  play.clock?.displayValue || play.period?.displayValue || '',
+          ownGoal: typeText.includes('own') || typeText.includes('propia'),
+          penalty: typeText.includes('pen') || typeText.includes('pk'),
+        });
+      }
+      return scorers;
+    }
 
-      const athleteName = play.participants?.[0]?.athlete?.displayName
-        || play.athlete?.displayName
-        || play.text?.split(' ')?.[0]
-        || 'Desconocido';
+    // 2. keyEvents — amistosos e outras competições (ESPN não usa scoringPlays)
+    //    Filtrar apenas eventos com scoringPlay: true
+    const keyEvents = (data.keyEvents || []).filter(e => e.scoringPlay === true);
+    if (keyEvents.length > 0) {
+      return keyEvents.map(event => {
+        const typeType = (event.type?.type || '').toLowerCase();
+        const typeText = (event.type?.text || '').toLowerCase();
+        const fullText = (event.text || '').toLowerCase();
 
-      scorers.push({
-        name: athleteName,
-        team: normalizeName(play.team?.displayName || play.team?.name || ''),
-        minute: play.clock?.displayValue || play.period?.displayValue || '',
-        ownGoal: typeText.includes('own') || typeText.includes('propia'),
-        penalty: typeText.includes('pen') || typeText.includes('pk'),
+        // Nome: participants > shortText sem sufixo > parse do texto
+        let name = event.participants?.[0]?.athlete?.displayName || '';
+        if (!name && event.shortText) {
+          name = event.shortText
+            .replace(/\s*(own\s+goal|own-goal|penalty\s+goal|penalty|goal)\s*$/i, '')
+            .trim();
+        }
+        if (!name) {
+          const m = event.text?.match(/\.\s+([^(]+)\s+\(/);
+          if (m) name = m[1].trim();
+        }
+        if (!name) name = 'Desconhecido';
+
+        return {
+          name,
+          team:    normalizeName(event.team?.displayName || event.team?.name || ''),
+          minute:  event.clock?.displayValue || '',
+          ownGoal: typeType === 'own-goal' || typeText.includes('own goal'),
+          penalty: typeType === 'penalty'  || fullText.includes('penalty'),
+        };
       });
     }
 
-    return scorers;
+    return [];
   } catch {
     return [];
   }
@@ -347,4 +377,4 @@ async function fetchESPNUpcoming(daysAhead = 7) {
   return [];
 }
 
-module.exports = { fetchESPNMatches, fetchFDOMatches, fetchESPNUpcoming };
+module.exports = { fetchESPNMatches, fetchFDOMatches, fetchESPNUpcoming, fetchGoalScorers };

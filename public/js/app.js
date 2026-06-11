@@ -44,10 +44,8 @@ const COUNTRY_CODES = {
 
 function flagImg(team) {
   const code = COUNTRY_CODES[team];
-  if (!code) {
-    return `<span class="team-flag-txt">${team.substring(0,3).toUpperCase()}</span>`;
-  }
-  return `<img class="team-flag" src="https://flagcdn.com/w80/${code}.png" alt="${team}" decoding="async">`;
+  if (!code) return `<span class="team-flag team-flag-txt">${team.substring(0,3).toUpperCase()}</span>`;
+  return `<span class="fi fi-${code} team-flag"></span>`;
 }
 
 // Fecha de inicio del torneo (primer partido)
@@ -179,7 +177,7 @@ function render() {
   let badgeHTML;
   if (isLive) {
     badgeHTML = brasilVivo
-      ? `<div class="live-badge brasil-live-badge"><span class="dot brasil-dot"></span>🇧🇷 BRASIL AO VIVO</div>`
+      ? `<div class="live-badge brasil-live-badge"><span class="dot brasil-dot"></span><span class="fi fi-br badge-flag"></span> BRASIL AO VIVO</div>`
       : `<div class="live-badge"><span class="dot"></span>${live.length} AO VIVO</div>`;
   } else if (all.length > 6) {
     const totalPages = Math.ceil(all.length / 6);
@@ -249,7 +247,7 @@ function renderCountdown(stage) {
     stage.innerHTML = `
       <div class="splash">
         <div class="countdown-label">Aguardando dados da partida...</div>
-        <div class="countdown-date">⚽ Copa do Mundo 2026 em andamento</div>
+        <div class="countdown-date">Copa do Mundo 2026 em andamento</div>
       </div>`;
     return;
   }
@@ -271,7 +269,7 @@ function renderCountdown(stage) {
         <span class="countdown-sep">:</span>
         ${unit(segs,  'Seg')}
       </div>
-      <div class="countdown-date">🏆 11 de Junho de 2026 — Cidade do México</div>
+      <div class="countdown-date">11 de Junho de 2026 &mdash; Cidade do M&eacute;xico</div>
     </div>`;
 }
 
@@ -322,12 +320,12 @@ function cardHTML(m) {
     const goalLines = arr => arr.map(s => {
       const min = s.minute ? `<span class="min"> ${s.minute}'</span>` : '';
       const tag = s.penalty ? `<span class="scorer-tag pen">P</span>` : s.ownGoal ? `<span class="scorer-tag og">PP</span>` : '';
-      return `<div class="scorer-line">⚽ ${s.name}${min}${tag}</div>`;
+      return `<div class="scorer-line"><span class="ic-goal"></span>${s.name}${min}${tag}</div>`;
     }).join('');
 
     const redLines = arr => arr.map(s => {
       const min = s.minute ? `<span class="min"> ${s.minute}'</span>` : '';
-      return `<div class="scorer-line red-card-line">🟥 ${s.name}${min}</div>`;
+      return `<div class="scorer-line red-card-line"><span class="ic-rc"></span>${s.name}${min}</div>`;
     }).join('');
 
     const hasLeft  = homeSc.length || homeRc.length;
@@ -343,7 +341,7 @@ function cardHTML(m) {
 
   // Badge exclusivo nos jogos do Brasil
   const brasilBadge = brasilJoga
-    ? `<div class="brasil-badge">🇧🇷 SELEÇÃO BRASILEIRA</div>`
+    ? `<div class="brasil-badge"><span class="fi fi-br badge-flag"></span> SELEÇÃO BRASILEIRA</div>`
     : '';
 
   return `
@@ -391,7 +389,7 @@ function renderTicker() {
     const fmtSc = arr => arr
       .map(s => `${s.name}${s.minute ? ` ${s.minute}'` : ''}${s.penalty?' (P)':''}${s.ownGoal?' (PP)':''}`)
       .join(', ');
-    const fmtRc = arr => arr.map(s => `🟥 ${s.name}${s.minute ? ` ${s.minute}'` : ''}`).join(', ');
+    const fmtRc = arr => arr.map(s => `[RC] ${s.name}${s.minute ? ` ${s.minute}'` : ''}`).join(', ');
 
     const homeSc = (m.goalScorers||[]).filter(s => s.team === m.homeTeam);
     const awaySc = (m.goalScorers||[]).filter(s => s.team === m.awayTeam);
@@ -408,7 +406,7 @@ function renderTicker() {
     return `${liveTag}${m.homeTeam} ${score} ${m.awayTeam}${eventHTML}`;
   });
 
-  el.innerHTML = parts.join(` ${sep} `) + ` ${sep} 🏆 Copa do Mundo 2026`;
+  el.innerHTML = parts.join(` ${sep} `) + ` ${sep} Copa do Mundo 2026`;
 }
 
 // ── Escala proporcional para telas menores que 1920×1080 ─────────────────────

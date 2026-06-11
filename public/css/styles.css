@@ -52,7 +52,8 @@ html, body {
 
 .trophy {
   font-size: 56px;
-  /* sin filtros para que el emoji se vea nítido */
+  color: var(--gold);
+  line-height: 1;
 }
 
 .title {
@@ -152,11 +153,11 @@ html, body {
   overflow: hidden;
 }
 
-.stage.cols-1 { grid-template-columns: 1fr; }
-.stage.cols-2 { grid-template-columns: 1fr 1fr; }
-.stage.cols-3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.stage.cols-1 { grid-template-columns: 1fr;        grid-template-rows: 1fr; }
+.stage.cols-2 { grid-template-columns: 1fr 1fr;    grid-template-rows: 1fr; }
+.stage.cols-3 { grid-template-columns: 1fr 1fr;    grid-template-rows: 1fr 1fr; }
 .stage.cols-3 .match-card:nth-child(3) { grid-column: 1 / 3; }
-.stage.cols-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.stage.cols-4 { grid-template-columns: 1fr 1fr;    grid-template-rows: 1fr 1fr; }
 .stage.cols-5,
 .stage.cols-6 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
 
@@ -407,41 +408,74 @@ html, body {
   min-width: 0;
 }
 
-/* Bandeiras — imagens reais (flagcdn.com) */
+/* Bandeiras — flag-icons (SVGs locais, sem dependência de internet) */
 .team-flag {
-  width: 96px;
-  height: 64px;
-  object-fit: cover;
+  display: inline-block !important;
+  width: 96px !important;
+  height: 64px !important;
+  background-size: cover !important;
+  background-position: center !important;
   border-radius: 5px;
-  display: block;
   flex-shrink: 0;
-  background: #1a2035; /* placeholder enquanto carrega */
+  vertical-align: middle;
 }
 
 .stage.cols-3 .team-flag,
-.stage.cols-4 .team-flag { width: 76px; height: 51px; }
+.stage.cols-4 .team-flag { width: 76px !important; height: 51px !important; }
 .stage.cols-5 .team-flag,
-.stage.cols-6 .team-flag { width: 58px; height: 39px; }
+.stage.cols-6 .team-flag { width: 58px !important; height: 39px !important; }
 
 /* Brasil: bandeira maior no card de destaque */
 .stage.brasil-priority .match-card:first-child .team-flag {
-  width: 110px;
-  height: 74px;
+  width: 120px !important;
+  height: 80px !important;
 }
 
 /* Fallback quando não há código de país */
 .team-flag-txt {
-  display: flex;
+  display: inline-flex !important;
   align-items: center;
   justify-content: center;
   width: 96px;
   height: 64px;
-  background: #1a2035;
+  background: #1a2035 !important;
   border-radius: 5px;
   font-size: 22px;
   font-weight: 900;
   color: var(--muted);
   letter-spacing: 2px;
+  flex-shrink: 0;
+}
+
+/* Bandeira pequena nos badges (BRASIL AO VIVO, SELEÇÃO) */
+.badge-flag {
+  display: inline-block !important;
+  width: 28px !important;
+  height: 20px !important;
+  background-size: cover !important;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+/* Ícones de evento nos cards (sem emoji) */
+.ic-goal {
+  display: inline-block;
+  width: 16px; height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  border: 2px solid #888;
+  vertical-align: middle;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+.ic-rc {
+  display: inline-block;
+  width: 12px; height: 16px;
+  background: var(--live);
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 6px;
   flex-shrink: 0;
 }
 

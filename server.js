@@ -9,6 +9,7 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/flag-icons', express.static(path.join(__dirname, 'node_modules/flag-icons')));
 app.use(express.json());
 
 // ── Caché ────────────────────────────────────────────────────────────────────

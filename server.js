@@ -3,7 +3,7 @@
 require('dotenv').config();
 const express = require('express');
 const path    = require('path');
-const { fetchESPNMatches, fetchFDOMatches, fetchESPNUpcoming } = require('./data/fetchers');
+const { fetchESPNMatches, fetchFDOMatches, fetchESPNUpcoming, fetchTheSportsDB } = require('./data/fetchers');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -13,8 +13,10 @@ app.use('/flag-icons', express.static(path.join(__dirname, 'node_modules/flag-ic
 app.use(express.json());
 
 // ── Caché ────────────────────────────────────────────────────────────────────
-const cache = { matches: null, lastUpdate: null, source: '' };
-const TTL   = 20_000; // 20 s
+const cache    = { matches: null, lastUpdate: null, source: '' };
+const lastGood = { matches: [], source: '', savedAt: 0 };
+const TTL           = 20_000;       // 20 s entre buscas
+const LAST_GOOD_TTL = 5 * 60_000;  // manter dados de emergência por até 5 min
 
 function stale() {
   return !cache.lastUpdate || (Date.now() - cache.lastUpdate) > TTL;
@@ -27,36 +29,54 @@ function todayISO()   { return new Date().toISOString().split('T')[0]; }
 const WC_START = new Date('2026-06-11T00:00:00-05:00');
 const wcAtivo  = () => new Date() >= WC_START;
 
-// ── Buscar partidas reais — sem dados inventados ──────────────────────────────
+// ── Buscar partidas reais — cascata de fontes com fallback ───────────────────
 async function fetchReal() {
   const date = todayDate();
 
-  // 1. Copa do Mundo (sempre prioridade máxima)
+  // 1. ESPN Copa do Mundo (prioridade máxima — melhor qualidade, tem goleadores)
   try {
     const m = await fetchESPNMatches(date, 'fifa.world');
-    if (m && m.length) return { matches: m, source: 'ESPN – Copa do Mundo' };
+    if (m && m.length) return { matches: m, source: 'ESPN' };
   } catch (e) { console.warn('[ESPN fifa.world]', e.message); }
 
-  // 2. Após início da Copa: mostrar APENAS dados do Mundial
-  //    Se não há jogos hoje → buscar próximos dias do torneio
   if (wcAtivo()) {
+    // 2. TheSportsDB — gratuito, sem chave, independente do ESPN
+    try {
+      const m = await fetchTheSportsDB(date);
+      if (m && m.length) return { matches: m, source: 'TheSportsDB' };
+    } catch (e) { console.warn('[TheSportsDB]', e.message); }
+
+    // 3. football-data.org (chave grátis opcional — tem goleadores)
+    if (process.env.FOOTBALL_API_KEY) {
+      try {
+        const m = await fetchFDOMatches(process.env.FOOTBALL_API_KEY, todayISO());
+        if (m && m.length) return { matches: m, source: 'football-data.org' };
+      } catch (e) { console.warn('[FDO]', e.message); }
+    }
+
+    // 4. ESPN próximos dias (entre jornadas — sem jogos hoje)
     try {
       const m = await fetchESPNUpcoming(7);
-      if (m && m.length) return { matches: m, source: 'ESPN – Copa do Mundo (próximos)' };
-    } catch (e) { console.warn('[ESPN WC próximos]', e.message); }
-    return { matches: [], source: 'copa-aguardando' };
+      if (m && m.length) return { matches: m, source: 'ESPN (próximos)' };
+    } catch (e) { console.warn('[ESPN próximos]', e.message); }
+
+    return { matches: [], source: 'sem-dados' };
   }
 
-  // 3. Antes da Copa: amistosos internacionais (pré-torneio)
+  // Antes da Copa: amistosos internacionais
   try {
     const m = await fetchESPNMatches(date, 'fifa.friendly');
     if (m && m.length) {
       const ativos = m.filter(p => p.status !== 'CANCELED');
-      if (ativos.length) return { matches: ativos, source: 'ESPN – Amistosos Internacionais' };
+      if (ativos.length) return { matches: ativos, source: 'ESPN (amistosos)' };
     }
   } catch (e) { console.warn('[ESPN fifa.friendly]', e.message); }
 
-  // 4. football-data.org (chave grátis opcional)
+  try {
+    const m = await fetchTheSportsDB(date);
+    if (m && m.length) return { matches: m, source: 'TheSportsDB (amistosos)' };
+  } catch (e) { console.warn('[TheSportsDB amistosos]', e.message); }
+
   if (process.env.FOOTBALL_API_KEY) {
     try {
       const m = await fetchFDOMatches(process.env.FOOTBALL_API_KEY, todayISO());
@@ -64,7 +84,6 @@ async function fetchReal() {
     } catch (e) { console.warn('[FDO]', e.message); }
   }
 
-  // 5. Sem dados disponíveis
   return { matches: [], source: 'sem-dados' };
 }
 
@@ -72,10 +91,29 @@ async function getMatches() {
   if (!stale() && cache.matches !== null) {
     return { matches: cache.matches, source: `cache (${cache.source})` };
   }
+
   const result = await fetchReal();
-  cache.matches    = result.matches;
-  cache.source     = result.source;
-  cache.lastUpdate = Date.now();
+
+  // Guardar último estado bom — nunca perder dados por falha transitória
+  if (result.matches.length > 0) {
+    lastGood.matches = result.matches;
+    lastGood.source  = result.source;
+    lastGood.savedAt = Date.now();
+  }
+
+  // Se todas as fontes falharam mas temos dados recentes, usá-los como emergência
+  if (result.matches.length === 0 && lastGood.matches.length > 0) {
+    const age = Date.now() - lastGood.savedAt;
+    if (age < LAST_GOOD_TTL) {
+      const mins = Math.round(age / 60_000);
+      console.warn(`[emergência] usando dados de ${mins}m atrás (${lastGood.source})`);
+      const src = `${lastGood.source} +${mins}m`;
+      cache.matches = lastGood.matches; cache.source = src; cache.lastUpdate = Date.now();
+      return { matches: lastGood.matches, source: src };
+    }
+  }
+
+  cache.matches = result.matches; cache.source = result.source; cache.lastUpdate = Date.now();
   console.log(`[datos] ${result.source} — ${result.matches.length} partidos`);
   return result;
 }

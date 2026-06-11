@@ -292,7 +292,7 @@ function cardHTML(m) {
   const cardClass = `match-card ${m.status.toLowerCase()}${brasilJoga ? ' brasil-match' : ''}`;
 
   const statusHTML = isLive
-    ? `<div class="card-status live"><span class="dot"></span>AO VIVO &nbsp;${m.minute}'</div>`
+    ? `<div class="card-status live"><span class="dot"></span>${m.minute === 'HT' ? 'INTERVALO' : `AO VIVO &nbsp;${m.minute}&#8242;`}</div>`
     : isDone
     ? `<div class="card-status finished">ENCERRADO</div>`
     : `<div class="card-status scheduled">EM BREVE</div>`;
@@ -379,7 +379,9 @@ function buildTickerItems() {
 
   const sep = `<span class="t-sep">|</span>`;
   return withScore.map((m, i) => {
-    const liveTag = m.status === 'LIVE' ? `<span class="t-live">AO VIVO ${m.minute}'</span> ` : '';
+    const liveTag = m.status === 'LIVE'
+      ? `<span class="t-live">${m.minute === 'HT' ? 'INTERVALO' : `AO VIVO ${m.minute}&#8242;`}</span> `
+      : '';
     const score   = `<span class="t-score">${m.homeScore}-${m.awayScore}</span>`;
     const counter = withScore.length > 1
       ? `<span class="t-counter">${i + 1}/${withScore.length}</span>` : '';

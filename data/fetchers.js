@@ -294,13 +294,21 @@ async function fetchESPNMatches(dateStr, competition = 'fifa.world') {
     const statusName = comp.status?.type?.name || '';
     const status = mapESPNStatus(statusName);
 
-    // displayClock pode vir como "23:00", "45+2", "90+4" etc.
+    // Minuto — string para preservar acréscimos ("45+3") e intervalo ("HT")
     const clockRaw = comp.status?.displayClock || '';
-    const minuteNum = status === 'LIVE'
-      ? (parseInt(clockRaw) || 0)
-      : (status === 'FINISHED' ? 90 : 0);
-    // Manter o string original para exibir acréscimos ("45+2'")
-    const minute = minuteNum;
+    let minute;
+    if (statusName === 'STATUS_HALFTIME') {
+      minute = 'HT';
+    } else if (status === 'LIVE') {
+      // ESPN pode retornar "45:00" (MM:SS) ou "45+2" ou "45"
+      minute = clockRaw.includes(':')
+        ? String(parseInt(clockRaw))   // "45:00" → "45"
+        : (clockRaw || '0');           // "45+2" → "45+2"  |  "" → "0"
+    } else if (status === 'FINISHED') {
+      minute = '90';
+    } else {
+      minute = '0';
+    }
 
     const homeScore = status !== 'SCHEDULED' ? parseInt(home.score ?? 0) : null;
     const awayScore = status !== 'SCHEDULED' ? parseInt(away.score ?? 0) : null;
@@ -374,6 +382,49 @@ async function fetchFDOMatches(apiKey, dateStr) {
   });
 }
 
+// ── TheSportsDB — fonte gratuita, sem chave, independente do ESPN ─────────────
+async function fetchTheSportsDB(dateStr) {
+  const d   = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
+  const url = `https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=${d}&s=Soccer`;
+  const res = await fetch(url, { timeout: 8000 });
+  if (!res.ok) throw new Error(`TheSportsDB HTTP ${res.status}`);
+  const data = await res.json();
+
+  const events = (data.events || []).filter(e => {
+    const league = (e.strLeague || '').toLowerCase();
+    return league.includes('world cup') || league.includes('copa') || league.includes('mundial');
+  });
+  if (!events.length) return [];
+
+  const STATUS = {
+    'NS':'SCHEDULED','TBD':'SCHEDULED',
+    '1H':'LIVE','HT':'LIVE','2H':'LIVE','ET':'LIVE','BT':'LIVE','P':'LIVE','LIVE':'LIVE','SUSP':'LIVE',
+    'FT':'FINISHED','AET':'FINISHED','PEN':'FINISHED',
+    'Postp.':'CANCELED','Canc.':'CANCELED','ABD':'CANCELED','WO':'CANCELED',
+  };
+
+  return events.map(e => {
+    const status   = STATUS[e.strStatus] || 'SCHEDULED';
+    const hasScore = e.intHomeScore != null && e.intHomeScore !== '';
+    return {
+      id:          `tsdb-${e.idEvent}`,
+      espnId:      null,
+      group:       '?',
+      status,
+      minute:      status === 'FINISHED' ? 90 : (parseInt(e.strProgress) || 0),
+      homeTeam:    normalizeName(e.strHomeTeam || ''),
+      awayTeam:    normalizeName(e.strAwayTeam || ''),
+      homeScore:   hasScore ? parseInt(e.intHomeScore) : null,
+      awayScore:   hasScore ? parseInt(e.intAwayScore) : null,
+      date:        e.dateEvent || d,
+      time:        e.strTime   ? e.strTime.slice(0, 5) : '--:--',
+      venue:       e.strVenue  || '',
+      goalScorers: [],
+      redCards:    [],
+    };
+  });
+}
+
 // ── Buscar los próximos días con partidos (pre-torneo / entre jornadas) ───────
 async function fetchESPNUpcoming(daysAhead = 7) {
   for (let i = 0; i <= daysAhead; i++) {
@@ -388,4 +439,4 @@ async function fetchESPNUpcoming(daysAhead = 7) {
   return [];
 }
 
-module.exports = { fetchESPNMatches, fetchFDOMatches, fetchESPNUpcoming, fetchGoalScorers };
+module.exports = { fetchESPNMatches, fetchFDOMatches, fetchESPNUpcoming, fetchGoalScorers, fetchTheSportsDB };

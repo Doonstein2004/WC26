@@ -459,4 +459,4 @@ document.addEventListener('visibilitychange', () => {
 
 // ── Arranque ──────────────────────────────────────────────────────────────────
 load();
-setInterval(load, 30_000); // buscar dados novos a cada 30s
+setInterval(load, 15_000); // buscar dados novos a cada 15s

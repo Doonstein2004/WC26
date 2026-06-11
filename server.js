@@ -14,7 +14,7 @@ app.use(express.json());
 
 // ── Caché ────────────────────────────────────────────────────────────────────
 const cache = { matches: null, lastUpdate: null, source: '' };
-const TTL   = 45_000; // 45 s
+const TTL   = 20_000; // 20 s
 
 function stale() {
   return !cache.lastUpdate || (Date.now() - cache.lastUpdate) > TTL;

@@ -116,7 +116,8 @@ function tick() {
   document.getElementById('date').textContent =
     `${DIAS[now.getDay()]} ${now.getDate()} ${MESES[now.getMonth()]} ${now.getFullYear()}`;
 }
-setInterval(tick, 1000);
+// Um único interval de 1s para tudo — evita dois timers simultâneos
+setInterval(() => { tick(); tickCountdown(); }, 1000);
 tick();
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
@@ -364,28 +365,25 @@ function cardHTML(m) {
     </div>`;
 }
 
-// ── Ticker ────────────────────────────────────────────────────────────────────
-function renderTicker() {
-  // Atualizar label com a fonte de dados
-  const lbl = document.getElementById('tickerLabel');
-  if (lbl) {
-    const isAmistoso = dataSource.toLowerCase().includes('amistoso');
-    lbl.textContent = isAmistoso ? '⚽ AMISTOSOS' : '⚽ PLACAR';
-  }
-  const el  = document.getElementById('ticker');
-  const sep = `<span class="t-sep">|</span>`;
+// ── Ticker — rotação estática (sem CSS scroll 60fps) ─────────────────────────
+// Cada partida fica 7s em tela; transição de 0.25s via CSS opacity.
+// Elimina o único animation loop contínuo que causava aquecimento constante.
+let tickerItems = [];
+let tickerIdx   = 0;
+let tickerTimer = null;
+const TICKER_MS = 7_000;
+
+function buildTickerItems() {
   const withScore = matches.filter(m => m.status !== 'SCHEDULED');
+  if (!withScore.length) return ['Copa do Mundo 2026 &nbsp;&middot;&nbsp; EUA &middot; Canad&aacute; &middot; M&eacute;xico'];
 
-  if (!withScore.length) {
-    el.innerHTML = 'Copa do Mundo 2026 🏆 &nbsp; EUA · Canadá · México &nbsp;·&nbsp; 11 de Junho de 2026';
-    return;
-  }
-
-  const parts = withScore.map(m => {
+  const sep = `<span class="t-sep">|</span>`;
+  return withScore.map((m, i) => {
     const liveTag = m.status === 'LIVE' ? `<span class="t-live">AO VIVO ${m.minute}'</span> ` : '';
     const score   = `<span class="t-score">${m.homeScore}-${m.awayScore}</span>`;
+    const counter = withScore.length > 1
+      ? `<span class="t-counter">${i + 1}/${withScore.length}</span>` : '';
 
-    // Formato: "Brasil 2-1 Argentina, BRA: Vinicius 23', Rodrygo 58' | ARG: Messi 41' (P)"
     const fmtSc = arr => arr
       .map(s => `${s.name}${s.minute ? ` ${s.minute}'` : ''}${s.penalty?' (P)':''}${s.ownGoal?' (PP)':''}`)
       .join(', ');
@@ -400,13 +398,40 @@ function renderTicker() {
     const awayParts = [fmtSc(awaySc), fmtRc(awayRc)].filter(Boolean).join(', ');
     const homeEvt   = homeParts ? `${abbrev(m.homeTeam)}: ${homeParts}` : '';
     const awayEvt   = awayParts ? `${abbrev(m.awayTeam)}: ${awayParts}` : '';
-    const evtStr    = [homeEvt, awayEvt].filter(Boolean).join(' | ');
-    const eventHTML = evtStr ? `, <span class="t-scorer">${evtStr}</span>` : '';
+    const evtStr    = [homeEvt, awayEvt].filter(Boolean).join(` ${sep} `);
+    const eventHTML = evtStr ? ` &nbsp;${sep}&nbsp; <span class="t-scorer">${evtStr}</span>` : '';
 
-    return `${liveTag}${m.homeTeam} ${score} ${m.awayTeam}${eventHTML}`;
+    return `${counter}${liveTag}${m.homeTeam} ${score} ${m.awayTeam}${eventHTML}`;
   });
+}
 
-  el.innerHTML = parts.join(` ${sep} `) + ` ${sep} Copa do Mundo 2026`;
+function showTickerItem(html) {
+  const el = document.getElementById('ticker');
+  if (!el) return;
+  el.classList.add('t-fade');
+  setTimeout(() => { el.innerHTML = html; el.classList.remove('t-fade'); }, 260);
+}
+
+function renderTicker() {
+  const lbl = document.getElementById('tickerLabel');
+  if (lbl) lbl.textContent = dataSource.toLowerCase().includes('amistoso') ? 'AMISTOSOS' : 'PLACAR';
+
+  tickerItems = buildTickerItems();
+  if (tickerIdx >= tickerItems.length) tickerIdx = 0;
+
+  // Mostrar item atual sem fade (chamado após re-render dos cards)
+  const el = document.getElementById('ticker');
+  if (el) el.innerHTML = tickerItems[tickerIdx] || '';
+
+  // Gerir timer: iniciar se há múltiplos itens, parar se não
+  if (tickerItems.length > 1 && !tickerTimer) {
+    tickerTimer = setInterval(() => {
+      tickerIdx = (tickerIdx + 1) % tickerItems.length;
+      showTickerItem(tickerItems[tickerIdx]);
+    }, TICKER_MS);
+  } else if (tickerItems.length <= 1 && tickerTimer) {
+    clearInterval(tickerTimer); tickerTimer = null;
+  }
 }
 
 // ── Escala proporcional para telas menores que 1920×1080 ─────────────────────
@@ -427,7 +452,11 @@ function scaleDisplay() {
 window.addEventListener('resize', scaleDisplay);
 scaleDisplay();
 
+// ── Pausar animações CSS quando a aba não está visível ───────────────────────
+document.addEventListener('visibilitychange', () => {
+  document.body.classList.toggle('animations-paused', document.hidden);
+});
+
 // ── Arranque ──────────────────────────────────────────────────────────────────
 load();
-setInterval(load,          30_000); // buscar dados novos a cada 30s
-setInterval(tickCountdown,  1_000); // atualiza só os números do countdown, sem tocar nos cards
+setInterval(load, 30_000); // buscar dados novos a cada 30s

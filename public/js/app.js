@@ -440,8 +440,8 @@ function renderTicker() {
 function scaleDisplay() {
   const scaleX = window.innerWidth  / 1920;
   const scaleY = window.innerHeight / 1080;
-  const scale  = Math.min(scaleX, scaleY, 1); // nunca escalar para cima
-  if (scale < 0.97) {
+  const scale  = Math.min(scaleX, scaleY); // escala em ambas as direções
+  if (scale < 0.97 || scale > 1.03) {
     document.body.style.transform      = `scale(${scale.toFixed(4)})`;
     document.body.style.transformOrigin = '0 0';
     document.body.style.width           = `${(100 / scale).toFixed(2)}%`;

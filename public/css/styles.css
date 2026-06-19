@@ -266,7 +266,8 @@ body.animations-paused * { animation-play-state: paused !important; }
   z-index: 0;
   will-change: opacity;
 }
-.match-card.brasil-match > * { position: relative; z-index: 1; }
+/* Conteúdo acima do pulso — exclui badges que têm position:absolute próprio */
+.match-card.brasil-match > *:not(.brasil-badge):not(.card-group) { position: relative; z-index: 1; }
 
 @keyframes brasil-pulse {
   0%,100% { opacity: 0.25; }
@@ -422,11 +423,14 @@ body.animations-paused * { animation-play-state: paused !important; }
 .stage.cols-5 .team-flag,
 .stage.cols-6 .team-flag { width: 58px !important; height: 39px !important; }
 
-/* Brasil: bandeira maior no card de destaque */
-.stage.brasil-priority .match-card:first-child .team-flag {
-  width: 120px !important;
-  height: 80px !important;
-}
+/* Brasil em destaque — conteúdo maior para preencher o card */
+.stage.brasil-priority .match-card:first-child .team-flag    { width: 160px !important; height: 107px !important; }
+.stage.brasil-priority .match-card:first-child .team-name    { font-size: 58px; }
+.stage.brasil-priority .match-card:first-child .score        { font-size: 200px; letter-spacing: -8px; }
+.stage.brasil-priority .match-card:first-child .score-sep    { font-size: 140px; }
+.stage.brasil-priority .match-card:first-child .scheduled-time { font-size: 140px; letter-spacing: 10px; }
+.stage.brasil-priority .match-card:first-child .card-status  { font-size: 34px; }
+.stage.brasil-priority .match-card:first-child .scorer-line  { font-size: 30px; }
 
 /* Fallback quando não há código de país */
 .team-flag-txt {

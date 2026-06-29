@@ -157,51 +157,48 @@ body.animations-paused * { animation-play-state: paused !important; }
   overflow: hidden;
 }
 
-.stage.cols-1 { grid-template-columns: 1fr;        grid-template-rows: 1fr; }
-.stage.cols-2 { grid-template-columns: 1fr 1fr;    grid-template-rows: 1fr; }
-.stage.cols-3 { grid-template-columns: 1fr 1fr;    grid-template-rows: 1fr 1fr; }
-.stage.cols-3 .match-card:nth-child(3) { grid-column: 1 / 3; }
-.stage.cols-4 { grid-template-columns: 1fr 1fr;    grid-template-rows: 1fr 1fr; }
+/* ── Grids base (sem Brasil) ──────────────────────────────────────────────── */
+.stage.cols-1 { grid-template-columns: 1fr;             grid-template-rows: 1fr; }
+.stage.cols-2 { grid-template-columns: 1fr 1fr;         grid-template-rows: 1fr; }
+.stage.cols-3 { grid-template-columns: 1fr 1fr;         grid-template-rows: 1fr 1fr; }
+.stage.cols-3 .match-card:nth-child(3) { grid-column: 1 / 3; }   /* 3º ocupa linha inteira */
+.stage.cols-4 { grid-template-columns: 1fr 1fr;         grid-template-rows: 1fr 1fr; }
 .stage.cols-5,
-.stage.cols-6 { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.stage.cols-6 { grid-template-columns: 1fr 1fr 1fr;     grid-template-rows: 1fr 1fr; }
 
-/* ════ BRASIL EM CAMPO — card sempre maior que os outros ════
-   O card do Brasil é sempre o primeiro filho (.match-card:first-child)
-   pois o JS ordena o Brasil na posição 0                         */
+/* ── BRASIL EM CAMPO — reset obrigatório antes das regras específicas ─────
+   .stage.cols-3 .match-card:nth-child(3) tem especificidade (0,4,0).
+   A regra abaixo tem (0,5,0) e cancela o span no contexto brasil-priority.  */
+.stage.brasil-priority.cols-3 .match-card:nth-child(3) { grid-column: auto; }
 
-/* 2 jogos: Brasil ocupa 60% da tela */
+/* 2 jogos: Brasil 60%, outro 40% — linha única */
 .stage.brasil-priority.cols-2 {
   grid-template-columns: 3fr 2fr;
+  grid-template-rows: 1fr;
 }
 
-/* 3 jogos: Brasil ocupa a linha de cima inteira */
+/* 3 jogos: Brasil ocupa linha superior inteira, 2 outros lado a lado */
 .stage.brasil-priority.cols-3 {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 3fr 2fr;
 }
-.stage.brasil-priority.cols-3 .match-card:first-child {
-  grid-column: 1 / 3;
-}
+.stage.brasil-priority.cols-3 .match-card:first-child { grid-column: 1 / 3; }
 
-/* 4 jogos: Brasil ocupa linha de cima inteira, 3 outros embaixo */
+/* 4 jogos: Brasil topo inteiro, 3 outros embaixo em 3 colunas */
 .stage.brasil-priority.cols-4 {
   grid-template-columns: 1fr 1fr 1fr;
   grid-template-rows: 2fr 1fr;
 }
-.stage.brasil-priority.cols-4 .match-card:first-child {
-  grid-column: 1 / 4;
-}
+.stage.brasil-priority.cols-4 .match-card:first-child { grid-column: 1 / 4; }
 
-/* 5 jogos: Brasil ocupa coluna esquerda inteira (2 linhas) */
+/* 5 jogos: Brasil coluna esquerda (2 linhas), 4 outros em 2×2 à direita */
 .stage.brasil-priority.cols-5 {
   grid-template-columns: 2fr 1fr 1fr;
   grid-template-rows: 1fr 1fr;
 }
-.stage.brasil-priority.cols-5 .match-card:first-child {
-  grid-row: 1 / 3;
-}
+.stage.brasil-priority.cols-5 .match-card:first-child { grid-row: 1 / 3; }
 
-/* 6 jogos: grid uniforme 3×2 (Brasil é o primeiro) */
+/* 6 jogos: grid uniforme 3×2 */
 .stage.brasil-priority.cols-6 {
   grid-template-columns: 1fr 1fr 1fr;
   grid-template-rows: 1fr 1fr;
@@ -424,13 +421,14 @@ body.animations-paused * { animation-play-state: paused !important; }
 .stage.cols-6 .team-flag { width: 58px !important; height: 39px !important; }
 
 /* Brasil em destaque — conteúdo maior para preencher o card */
-.stage.brasil-priority .match-card:first-child .team-flag    { width: 160px !important; height: 107px !important; }
-.stage.brasil-priority .match-card:first-child .team-name    { font-size: 58px; }
-.stage.brasil-priority .match-card:first-child .score        { font-size: 200px; letter-spacing: -8px; }
-.stage.brasil-priority .match-card:first-child .score-sep    { font-size: 140px; }
-.stage.brasil-priority .match-card:first-child .scheduled-time { font-size: 140px; letter-spacing: 10px; }
-.stage.brasil-priority .match-card:first-child .card-status  { font-size: 34px; }
-.stage.brasil-priority .match-card:first-child .scorer-line  { font-size: 30px; }
+.stage.brasil-priority .match-card:first-child              { justify-content: space-evenly; }
+.stage.brasil-priority .match-card:first-child .team-flag   { width: 160px !important; height: 107px !important; }
+.stage.brasil-priority .match-card:first-child .team-name   { font-size: 58px; }
+.stage.brasil-priority .match-card:first-child .score       { font-size: 200px; letter-spacing: -8px; }
+.stage.brasil-priority .match-card:first-child .score-sep   { font-size: 140px; }
+.stage.brasil-priority .match-card:first-child .scheduled-time { font-size: 120px; letter-spacing: 4px; }
+.stage.brasil-priority .match-card:first-child .card-status { font-size: 34px; }
+.stage.brasil-priority .match-card:first-child .scorer-line { font-size: 30px; }
 
 /* Fallback quando não há código de país */
 .team-flag-txt {
